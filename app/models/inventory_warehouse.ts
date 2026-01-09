@@ -3,6 +3,7 @@ import { BaseModel, column, hasMany } from '@adonisjs/lucid/orm'
 import type { HasMany } from '@adonisjs/lucid/types/relations'
 import PurchaseOrder from '#models/purchase_order'
 import StockCount from '#models/stock_count'
+import StockRequest from '#models/stock_request'
 
 export default class InventoryWarehouse extends BaseModel {
   public static table = 'inventory_warehouses'
@@ -33,6 +34,9 @@ export default class InventoryWarehouse extends BaseModel {
 
   @hasMany(() => StockCount, { foreignKey: 'warehouseId' })
   declare stockCounts: HasMany<typeof StockCount>
+
+  @hasMany(() => StockRequest, { foreignKey: 'warehouseId' })
+  declare stockRequests: HasMany<typeof StockRequest>
 
   @column.dateTime({ autoCreate: true, columnName: 'created_at' })
   declare createdAt: DateTime

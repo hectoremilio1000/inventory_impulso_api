@@ -15,7 +15,8 @@ export default class InventoryItemsController {
       .preload('group')
       .preload('unit')
       .preload('photos')
-      .orderBy('name', 'asc')
+      .orderBy('createdAt', 'desc')
+      .orderBy('id', 'desc')
 
     if (q) {
       query.whereILike('code', `%${q}%`).orWhereILike('name', `%${q}%`)

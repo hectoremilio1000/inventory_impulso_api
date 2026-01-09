@@ -2,6 +2,7 @@ import { DateTime } from 'luxon'
 import { BaseModel, column, hasMany } from '@adonisjs/lucid/orm'
 import type { HasMany } from '@adonisjs/lucid/types/relations'
 import PurchaseOrder from '#models/purchase_order'
+import StockRequest from '#models/stock_request'
 
 export default class PurchaseRun extends BaseModel {
   public static table = 'purchase_runs'
@@ -44,4 +45,7 @@ export default class PurchaseRun extends BaseModel {
 
   @hasMany(() => PurchaseOrder, { foreignKey: 'purchaseRunId' })
   declare purchaseOrders: HasMany<typeof PurchaseOrder>
+
+  @hasMany(() => StockRequest, { foreignKey: 'purchaseRunId' })
+  declare stockRequests: HasMany<typeof StockRequest>
 }

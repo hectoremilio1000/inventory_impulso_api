@@ -19,6 +19,9 @@ export default class InventoryRecipe extends BaseModel {
   @column({ columnName: 'pos_product_code' })
   declare posProductCode: string | null
 
+  @column()
+  declare name: string | null
+
   @column({ columnName: 'is_active' })
   declare isActive: boolean
 

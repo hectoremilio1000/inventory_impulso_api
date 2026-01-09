@@ -4,6 +4,7 @@ import type { BelongsTo } from '@adonisjs/lucid/types/relations'
 
 import InventoryPresentation from '#models/inventory_presentation'
 import Supplier from '#models/supplier'
+import WarehouseLocation from '#models/warehouse_location'
 
 const dec = {
   prepare: (v: number | null | undefined) => (v === null || v === undefined ? v : String(v)),
@@ -54,6 +55,12 @@ export default class InventoryPresentationDetail extends BaseModel {
 
   @column()
   declare location: string | null
+
+  @column({ columnName: 'location_id' })
+  declare locationId: number | null
+
+  @belongsTo(() => WarehouseLocation, { foreignKey: 'locationId' })
+  declare locationRow: BelongsTo<typeof WarehouseLocation>
 
   @column({ columnName: 'use_scale' })
   declare useScale: boolean | null

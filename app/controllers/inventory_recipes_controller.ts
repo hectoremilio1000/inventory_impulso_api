@@ -4,6 +4,14 @@ import InventoryRecipeLine from '#models/inventory_recipe_line'
 import InventoryItem from '#models/inventory_item'
 import { getRestaurantId } from '#utils/restaurant'
 
+function serializeRecipe(row: InventoryRecipe) {
+  const data = row.serialize()
+  return {
+    ...data,
+    name: data.name ?? data.posProductCode ?? `POS-${data.posProductId}`,
+  }
+}
+
 export default class InventoryRecipesController {
   // GET /api/inventory/recipes?q=&posProductId=
   public async index({ request }: HttpContext) {
@@ -14,28 +22,32 @@ export default class InventoryRecipesController {
     const query = InventoryRecipe.query().where('restaurantId', restaurantId).orderBy('id', 'desc')
 
     if (posProductId) query.where('posProductId', Number(posProductId))
-    if (q) query.where((b) => b.whereILike('posProductCode', `%${q}%`))
+    if (q) query.where((b) => b.whereILike('posProductCode', `%${q}%`).orWhereILike('name', `%${q}%`))
 
-    return query
+    const rows = await query
+    return rows.map(serializeRecipe)
   }
 
   // GET /api/inventory/recipes/:id  (incluye lines)
   public async show({ params, request }: HttpContext) {
     const restaurantId = getRestaurantId({ request } as any)
 
-    return InventoryRecipe.query()
+    const row = await InventoryRecipe.query()
       .where('restaurantId', restaurantId)
       .where('id', Number(params.id))
       .preload('lines', (lq) => lq.preload('item', (iq) => iq.preload('unit').preload('group')))
       .firstOrFail()
+
+    return serializeRecipe(row)
   }
 
   // POST /api/inventory/recipes
-  // body: { posProductId, posProductCode?, isActive? }
+  // body: { posProductId, name, posProductCode?, isActive? }
   public async store({ request, response }: HttpContext) {
     const restaurantId = getRestaurantId({ request } as any)
 
     const posProductId = Number(request.input('posProductId') || 0)
+    const name = String(request.input('name') ?? '').trim()
     const posProductCode = request.input('posProductCode')
       ? String(request.input('posProductCode'))
       : null
@@ -45,10 +57,13 @@ export default class InventoryRecipesController {
     if (!posProductId) {
       return response.badRequest({ error: 'posProductId requerido' })
     }
+    if (!name) {
+      return response.badRequest({ error: 'name requerido' })
+    }
 
     const row = await InventoryRecipe.updateOrCreate(
       { restaurantId, posProductId },
-      { restaurantId, posProductId, posProductCode, isActive }
+      { restaurantId, posProductId, posProductCode, name, isActive }
     )
 
     return response.created(row)
@@ -64,13 +79,14 @@ export default class InventoryRecipesController {
       .firstOrFail()
 
     row.merge({
+      name: request.input('name') ?? row.name,
       posProductCode: request.input('posProductCode') ?? row.posProductCode,
       isActive:
         request.input('isActive') !== undefined ? Boolean(request.input('isActive')) : row.isActive,
     })
 
     await row.save()
-    return row
+    return serializeRecipe(row)
   }
 
   // DELETE /api/inventory/recipes/:id

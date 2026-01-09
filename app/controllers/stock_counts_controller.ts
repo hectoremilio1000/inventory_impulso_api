@@ -132,6 +132,28 @@ export default class StockCountsController {
     return item
   }
 
+  // DELETE /stock-counts/:id/items/:itemId
+  public async destroyItem({ params, request, response }: HttpContext) {
+    const restaurantId = getRestaurantId({ request } as any)
+
+    const stockCount = await StockCount.query()
+      .where('restaurantId', restaurantId)
+      .where('id', params.id)
+      .firstOrFail()
+
+    if (stockCount.status !== 'in_progress') {
+      return response.badRequest({ message: 'El conteo no está en progreso' })
+    }
+
+    const item = await StockCountItem.query()
+      .where('stockCountId', stockCount.id)
+      .where('id', params.itemId)
+      .firstOrFail()
+
+    await item.delete()
+    return response.noContent()
+  }
+
   // POST /stock-counts/:id/close  -> genera ajustes y actualiza inventory_stocks
   public async close({ params, request, response }: HttpContext) {
     const restaurantId = getRestaurantId({ request } as any)

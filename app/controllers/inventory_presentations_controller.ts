@@ -4,6 +4,7 @@ import InventoryPresentation from '#models/inventory_presentation'
 import InventoryItem from '#models/inventory_item'
 import { getRestaurantId } from '#utils/restaurant'
 import InventoryPresentationDetail from '#models/inventory_presentation_detail'
+import WarehouseLocation from '#models/warehouse_location'
 
 async function getUsageCountByPresentationId(ids: number[]) {
   if (!ids.length) return new Map<number, number>()
@@ -275,6 +276,7 @@ export default class InventoryPresentationsController {
       'status',
       'autoDecrementOnUse',
       'location',
+      'locationId',
       'useScale',
       'standardCost',
 
@@ -282,6 +284,19 @@ export default class InventoryPresentationsController {
       'lastCost',
       'averageCost',
     ])
+
+    // valida ubicación si viene locationId
+    if (payload.locationId) {
+      const loc = await WarehouseLocation.query()
+        .where('restaurantId', restaurantId)
+        .where('id', Number(payload.locationId))
+        .firstOrFail()
+      // sincroniza nombre como etiqueta legible (backward compat)
+      payload.location = payload.location ?? loc.name
+      payload.locationId = loc.id
+    } else {
+      payload.locationId = null
+    }
 
     // ✅ upsert por presentationId
     let detail = await InventoryPresentationDetail.query().where('presentationId', pres.id).first()

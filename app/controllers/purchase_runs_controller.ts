@@ -3,6 +3,7 @@ import db from '@adonisjs/lucid/services/db'
 import { DateTime } from 'luxon'
 import PurchaseRun from '#models/purchase_run'
 import PurchaseOrder from '#models/purchase_order'
+import StockRequest from '#models/stock_request'
 import { getRestaurantId } from '#utils/restaurant'
 
 function formatRunCode(runAt: DateTime, runNumber: number) {
@@ -103,7 +104,17 @@ export default class PurchaseRunsController {
       .preload('warehouse')
       .orderBy('id', 'desc')
 
-    return { ...run.serialize(), purchaseOrders: orders.map((o) => o.serialize()) }
+    const requests = await StockRequest.query()
+      .where('restaurantId', restaurantId)
+      .where('purchaseRunId', run.id)
+      .preload('warehouse')
+      .orderBy('id', 'desc')
+
+    return {
+      ...run.serialize(),
+      purchaseOrders: orders.map((o) => o.serialize()),
+      stockRequests: requests.map((r) => r.serialize()),
+    }
   }
 
   // POST /api/purchase-runs/:id/close

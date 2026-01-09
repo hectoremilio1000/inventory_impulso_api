@@ -21,7 +21,9 @@ const SupplierMarketSuppliersController = () =>
 const PurchaseRoutesController = () => import('#controllers/purchase_routes_controller')
 
 const InventoryWarehousesController = () => import('#controllers/inventory_warehouses_controller')
+const WarehouseLocationsController = () => import('#controllers/warehouse_locations_controller')
 const PurchaseOrdersController = () => import('#controllers/purchase_orders_controller')
+const StockRequestsController = () => import('#controllers/stock_requests_controller')
 
 const InventoryStocksController = () => import('#controllers/inventory_stocks_controller')
 const StockCountsController = () => import('#controllers/stock_counts_controller')
@@ -129,6 +131,10 @@ router
     router.post('/inventory/warehouses', [InventoryWarehousesController, 'store'])
     router.put('/inventory/warehouses/:id', [InventoryWarehousesController, 'update'])
     router.delete('/inventory/warehouses/:id', [InventoryWarehousesController, 'destroy'])
+    router.get('/inventory/warehouse-locations', [WarehouseLocationsController, 'index'])
+    router.post('/inventory/warehouse-locations', [WarehouseLocationsController, 'store'])
+    router.put('/inventory/warehouse-locations/:id', [WarehouseLocationsController, 'update'])
+    router.delete('/inventory/warehouse-locations/:id', [WarehouseLocationsController, 'destroy'])
 
     /* ========= Compras ========= */
     router.get('/purchase-orders', [PurchaseOrdersController, 'index'])
@@ -138,6 +144,11 @@ router
     router.put('/purchase-orders/:id', [PurchaseOrdersController, 'update'])
     router.post('/purchase-orders/:id/items', [PurchaseOrdersController, 'addItem'])
     router.post('/purchase-orders/:id/receive', [PurchaseOrdersController, 'receive'])
+    router.get('/stock-requests', [StockRequestsController, 'index'])
+    router.post('/stock-requests', [StockRequestsController, 'store'])
+    router.get('/stock-requests/:id', [StockRequestsController, 'show'])
+    router.put('/stock-requests/:id', [StockRequestsController, 'update'])
+    router.post('/stock-requests/:id/items', [StockRequestsController, 'addItem'])
     /* ========= Viajes de compra (purchase_runs) ========= */
     router.get('/purchase-runs', [PurchaseRunsController, 'index'])
     router.post('/purchase-runs', [PurchaseRunsController, 'store'])
@@ -152,6 +163,7 @@ router
     router.get('/stock-counts/:id', [StockCountsController, 'show'])
     router.post('/stock-counts/:id/items', [StockCountsController, 'addItem'])
     router.patch('/stock-counts/:id/items/:itemId', [StockCountsController, 'updateItem'])
+    router.delete('/stock-counts/:id/items/:itemId', [StockCountsController, 'destroyItem'])
     router.post('/stock-counts/:id/close', [StockCountsController, 'close'])
     router.get('inventory/external-refs', [InventoryExternalRefsController, 'index'])
     router.delete('inventory/external-refs/:id', [InventoryExternalRefsController, 'destroy'])
