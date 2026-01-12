@@ -10,6 +10,8 @@ export default class InventoryItemsController {
     const groupId = request.input('groupId')
     const kind = request.input('kind')
 
+    const includeInactive = String(request.input('includeInactive') ?? 'false') === 'true'
+
     const query = InventoryItem.query()
       .where('restaurantId', restaurantId)
       .preload('group')
@@ -23,6 +25,7 @@ export default class InventoryItemsController {
     }
     if (groupId) query.where('groupId', Number(groupId))
     if (kind) query.where('kind', String(kind))
+    if (!includeInactive) query.where('isActive', true)
 
     return query
   }
@@ -66,7 +69,7 @@ export default class InventoryItemsController {
       .where('id', params.id)
       .firstOrFail()
 
-    item.merge(request.only(['code', 'name', 'description', 'groupId', 'unitId', 'kind']))
+    item.merge(request.only(['code', 'name', 'description', 'groupId', 'unitId', 'kind', 'isActive']))
     await item.save()
 
     return item
@@ -112,7 +115,8 @@ export default class InventoryItemsController {
       .where('id', params.id)
       .firstOrFail()
 
-    await item.delete()
+    item.isActive = false
+    await item.save()
     return response.noContent()
   }
 }

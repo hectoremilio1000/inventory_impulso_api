@@ -30,6 +30,9 @@ export default class PurchaseOrderItem extends BaseModel {
   @column({ ...dec })
   declare quantity: number
 
+  @column({ columnName: 'received_qty', ...dec })
+  declare receivedQty: number | null
+
   @column({ columnName: 'unit_price', ...dec })
   declare unitPrice: number
 

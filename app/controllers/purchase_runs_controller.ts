@@ -133,4 +133,20 @@ export default class PurchaseRunsController {
 
     return { ok: true }
   }
+
+  // POST /api/purchase-runs/:id/reopen
+  public async reopen({ params, request }: HttpContext) {
+    const restaurantId = getRestaurantId({ request } as any)
+
+    const run = await PurchaseRun.query()
+      .where('restaurantId', restaurantId)
+      .where('id', params.id)
+      .firstOrFail()
+
+    run.status = 'draft'
+    run.closedBy = null
+    await run.save()
+
+    return { ok: true }
+  }
 }

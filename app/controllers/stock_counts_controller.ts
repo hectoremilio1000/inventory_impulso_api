@@ -15,6 +15,7 @@ export default class StockCountsController {
 
     const q = StockCount.query()
       .where('restaurantId', restaurantId)
+      .whereNull('deletedAt')
       .preload('warehouse')
       .orderBy('id', 'desc')
     if (status) q.where('status', String(status))
@@ -24,13 +25,14 @@ export default class StockCountsController {
 
   public async store({ request, response }: HttpContext) {
     const restaurantId = getRestaurantId({ request } as any)
-    const payload = request.only(['warehouseId', 'startedAt', 'notes', 'createdBy'])
+    const payload = request.only(['warehouseId', 'startedAt', 'notes', 'createdBy', 'countedBy'])
     const row = await StockCount.create({
       restaurantId,
       warehouseId: payload.warehouseId,
       startedAt: payload.startedAt ? DateTime.fromISO(String(payload.startedAt)) : DateTime.now(),
       notes: payload.notes,
       createdBy: payload.createdBy,
+      countedBy: payload.countedBy,
       status: 'in_progress',
     })
     return response.created(row)
@@ -40,6 +42,7 @@ export default class StockCountsController {
     const restaurantId = getRestaurantId({ request } as any)
     return StockCount.query()
       .where('restaurantId', restaurantId)
+      .whereNull('deletedAt')
       .where('id', params.id)
       .preload('warehouse')
       .preload('items', (q) => q.preload('item').preload('presentation'))
@@ -231,5 +234,34 @@ export default class StockCountsController {
     })
 
     return { ok: true }
+  }
+
+  // DELETE /stock-counts/:id
+  public async destroy({ params, request, response }: HttpContext) {
+    const restaurantId = getRestaurantId({ request } as any)
+
+    const stockCount = await StockCount.query()
+      .where('restaurantId', restaurantId)
+      .where('id', params.id)
+      .firstOrFail()
+
+    if (stockCount.status !== 'in_progress') {
+      return response.badRequest({ message: 'El conteo no está en progreso' })
+    }
+
+    const itemsCountRow = await StockCountItem.query()
+      .where('stockCountId', stockCount.id)
+      .count('* as c')
+      .first()
+
+    const itemsCount = Number((itemsCountRow as any)?.$extras?.c ?? 0)
+    if (itemsCount > 0) {
+      return response.badRequest({ message: 'El conteo ya tiene items' })
+    }
+
+    stockCount.status = 'cancelled'
+    stockCount.deletedAt = DateTime.now()
+    await stockCount.save()
+    return response.noContent()
   }
 }

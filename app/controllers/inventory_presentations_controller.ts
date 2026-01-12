@@ -5,6 +5,7 @@ import InventoryItem from '#models/inventory_item'
 import { getRestaurantId } from '#utils/restaurant'
 import InventoryPresentationDetail from '#models/inventory_presentation_detail'
 import WarehouseLocation from '#models/warehouse_location'
+import InventoryPresentationSupplierCost from '#models/inventory_presentation_supplier_cost'
 
 async function getUsageCountByPresentationId(ids: number[]) {
   if (!ids.length) return new Map<number, number>()
@@ -33,6 +34,38 @@ async function getUsageCountByPresentationId(ids: number[]) {
     const id = Number(r.presentation_id)
     const prev = map.get(id) ?? 0
     map.set(id, prev + Number(r.c))
+  }
+
+  return map
+}
+
+async function getDefaultSupplierLastCostMap(
+  restaurantId: number,
+  rows: InventoryPresentation[]
+): Promise<Map<string, number | null>> {
+  const pairs = rows
+    .map((r) => {
+      const supplierId = r.detail?.supplierId ?? r.detail?.supplier?.id ?? null
+      return supplierId ? { presentationId: r.id, supplierId } : null
+    })
+    .filter((p): p is { presentationId: number; supplierId: number } => !!p)
+
+  if (!pairs.length) return new Map()
+
+  const presentationIds = Array.from(new Set(pairs.map((p) => p.presentationId)))
+  const supplierIds = Array.from(new Set(pairs.map((p) => p.supplierId)))
+
+  const rowsCost = await db
+    .from('inventory_presentation_supplier_costs')
+    .where('restaurant_id', restaurantId)
+    .whereIn('presentation_id', presentationIds)
+    .whereIn('supplier_id', supplierIds)
+    .select('presentation_id', 'supplier_id', 'last_cost')
+
+  const map = new Map<string, number | null>()
+  for (const r of rowsCost as any[]) {
+    const key = `${Number(r.presentation_id)}-${Number(r.supplier_id)}`
+    map.set(key, r.last_cost === null || r.last_cost === undefined ? null : Number(r.last_cost))
   }
 
   return map
@@ -82,12 +115,19 @@ export default class InventoryPresentationsController {
 
     const ids = rows.map((r) => r.id)
     const usageMap = await getUsageCountByPresentationId(ids)
+    const defaultCostMap = await getDefaultSupplierLastCostMap(restaurantId, rows)
 
     // ✅ anexamos flags para el front
     return rows.map((r) => ({
       ...r.serialize(),
       usageCount: usageMap.get(r.id) ?? 0,
       canDelete: (usageMap.get(r.id) ?? 0) === 0,
+      defaultSupplierLastCost: (() => {
+        const supplierId = r.detail?.supplierId ?? r.detail?.supplier?.id
+        if (!supplierId) return null
+        const key = `${r.id}-${supplierId}`
+        return defaultCostMap.get(key) ?? null
+      })(),
     }))
   }
 
@@ -140,11 +180,18 @@ export default class InventoryPresentationsController {
     const rows = await query
     const ids = rows.map((r) => r.id)
     const usageMap = await getUsageCountByPresentationId(ids)
+    const defaultCostMap = await getDefaultSupplierLastCostMap(restaurantId, rows)
 
     return rows.map((r) => ({
       ...r.serialize(),
       usageCount: usageMap.get(r.id) ?? 0,
       canDelete: (usageMap.get(r.id) ?? 0) === 0,
+      defaultSupplierLastCost: (() => {
+        const supplierId = r.detail?.supplierId ?? r.detail?.supplier?.id
+        if (!supplierId) return null
+        const key = `${r.id}-${supplierId}`
+        return defaultCostMap.get(key) ?? null
+      })(),
     }))
   }
 
@@ -312,6 +359,25 @@ export default class InventoryPresentationsController {
     }
 
     await detail.load('supplier')
+
+    // ✅ asegura registro en supplier_costs cuando hay proveedor default
+    if (payload.supplierId) {
+      const supplierId = Number(payload.supplierId)
+      let costRow = await InventoryPresentationSupplierCost.query()
+        .where('restaurantId', restaurantId)
+        .where('presentationId', pres.id)
+        .where('supplierId', supplierId)
+        .first()
+
+      if (!costRow) {
+        costRow = await InventoryPresentationSupplierCost.create({
+          restaurantId,
+          presentationId: pres.id,
+          supplierId,
+          lastCost: null,
+        })
+      }
+    }
     return detail
   }
 }

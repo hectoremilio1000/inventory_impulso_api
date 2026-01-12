@@ -38,6 +38,9 @@ export default class StockRequest extends BaseModel {
   @column.dateTime({ columnName: 'requested_at' })
   declare requestedAt: DateTime
 
+  @column.dateTime({ columnName: 'fulfilled_at' })
+  declare fulfilledAt: DateTime | null
+
   @column()
   declare status: string
 

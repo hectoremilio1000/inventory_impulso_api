@@ -35,6 +35,9 @@ export default class InventoryItem extends BaseModel {
   @column()
   declare kind: string // raw | prepared | packaging | ...
 
+  @column({ columnName: 'is_active' })
+  declare isActive: boolean
+
   @belongsTo(() => InventoryGroup, { foreignKey: 'groupId' })
   declare group: BelongsTo<typeof InventoryGroup>
 

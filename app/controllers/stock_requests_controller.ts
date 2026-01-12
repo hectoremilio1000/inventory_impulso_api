@@ -1,4 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
+import db from '@adonisjs/lucid/services/db'
 import { DateTime } from 'luxon'
 import InventoryWarehouse from '#models/inventory_warehouse'
 import PurchaseRun from '#models/purchase_run'
@@ -115,6 +116,108 @@ export default class StockRequestsController {
     return response.created(item)
   }
 
+  // PUT /stock-requests/:id/items/:itemId
+  public async updateItem({ params, request, response }: HttpContext) {
+    const restaurantId = getRestaurantId({ request } as any)
+
+    const stockRequest = await StockRequest.query()
+      .where('restaurantId', restaurantId)
+      .where('id', params.id)
+      .firstOrFail()
+
+    if (['fulfilled', 'cancelled'].includes(String(stockRequest.status))) {
+      return response.badRequest({ message: 'El pedido ya está cerrado' })
+    }
+
+    const item = await StockRequestItem.query()
+      .where('stockRequestId', stockRequest.id)
+      .where('id', params.itemId)
+      .firstOrFail()
+
+    const payload = request.only(['quantity', 'notes'])
+
+    item.merge({
+      quantity: payload.quantity ?? item.quantity,
+      notes: payload.notes ?? item.notes,
+    })
+
+    await item.save()
+    await item.load('presentation')
+
+    return item
+  }
+
+  // DELETE /stock-requests/:id/items/:itemId
+  public async destroyItem({ params, request, response }: HttpContext) {
+    const restaurantId = getRestaurantId({ request } as any)
+
+    const stockRequest = await StockRequest.query()
+      .where('restaurantId', restaurantId)
+      .where('id', params.id)
+      .firstOrFail()
+
+    if (['fulfilled', 'cancelled'].includes(String(stockRequest.status))) {
+      return response.badRequest({ message: 'El pedido ya está cerrado' })
+    }
+
+    const item = await StockRequestItem.query()
+      .where('stockRequestId', stockRequest.id)
+      .where('id', params.itemId)
+      .firstOrFail()
+
+    await item.delete()
+    return { ok: true }
+  }
+
+  // POST /stock-requests/:id/fulfill
+  public async fulfill({ params, request, response }: HttpContext) {
+    const restaurantId = getRestaurantId({ request } as any)
+
+    const stockRequest = await StockRequest.query()
+      .where('restaurantId', restaurantId)
+      .where('id', params.id)
+      .preload('items')
+      .firstOrFail()
+
+    if (String(stockRequest.status) === 'cancelled') {
+      return response.badRequest({ message: 'El pedido está cancelado' })
+    }
+
+    const itemsPayload = Array.isArray(request.input('items')) ? request.input('items') : []
+    const fulfilledQtyMap = new Map<number, number>()
+    for (const row of itemsPayload) {
+      const id = Number(row?.id)
+      if (!Number.isFinite(id)) continue
+      const qty = row?.fulfilledQty
+      if (qty === null || qty === undefined || Number.isNaN(Number(qty))) continue
+      fulfilledQtyMap.set(id, Number(qty))
+    }
+
+    const complete = String(request.input('complete') ?? 'false') === 'true'
+    const fulfilledAtRaw = request.input('fulfilledAt')
+    const fulfilledAt = fulfilledAtRaw ? DateTime.fromISO(String(fulfilledAtRaw)) : DateTime.now()
+
+    await db.transaction(async (trx) => {
+      stockRequest.useTransaction(trx)
+
+      for (const item of stockRequest.items) {
+        const nextQty = fulfilledQtyMap.has(item.id)
+          ? Number(fulfilledQtyMap.get(item.id))
+          : Number(item.quantity)
+        item.useTransaction(trx)
+        item.fulfilledQty = nextQty
+        await item.save()
+      }
+
+      stockRequest.status = complete ? 'fulfilled' : 'in_progress'
+      stockRequest.fulfilledAt = complete ? fulfilledAt : null
+      await stockRequest.save()
+    })
+
+    await stockRequest.load('items', (q) => q.preload('presentation'))
+    return stockRequest
+  }
+
   public async update({ params, request }: HttpContext) {
     const restaurantId = getRestaurantId({ request } as any)
 
@@ -159,5 +262,44 @@ export default class StockRequestsController {
 
     await stockRequest.save()
     return stockRequest
+  }
+
+  public async destroy({ params, request, response }: HttpContext) {
+    const restaurantId = getRestaurantId({ request } as any)
+
+    const stockRequest = await StockRequest.query()
+      .where('restaurantId', restaurantId)
+      .where('id', params.id)
+      .firstOrFail()
+
+    if (stockRequest.purchaseRunId) {
+      const run = await PurchaseRun.query()
+        .where('restaurantId', restaurantId)
+        .where('id', stockRequest.purchaseRunId)
+        .firstOrFail()
+
+      if (run.status !== 'draft') {
+        return response.badRequest({ message: 'El viaje no está en borrador' })
+      }
+    }
+
+    if (String(stockRequest.status) !== 'draft') {
+      return response.badRequest({ message: 'El pedido no está en borrador' })
+    }
+
+    const itemsCountRow = await StockRequestItem.query()
+      .where('stockRequestId', stockRequest.id)
+      .count('* as c')
+      .first()
+
+    const itemsCount = Number((itemsCountRow as any)?.$extras?.c ?? 0)
+    if (itemsCount > 0) {
+      return response.badRequest({ message: 'El pedido ya tiene productos' })
+    }
+
+    stockRequest.status = 'cancelled'
+    await stockRequest.save()
+
+    return { ok: true }
   }
 }

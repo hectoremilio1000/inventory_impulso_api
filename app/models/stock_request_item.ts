@@ -30,6 +30,9 @@ export default class StockRequestItem extends BaseModel {
   @column({ ...dec })
   declare quantity: number
 
+  @column({ columnName: 'fulfilled_qty', ...dec })
+  declare fulfilledQty: number | null
+
   @column()
   declare notes: string | null
 

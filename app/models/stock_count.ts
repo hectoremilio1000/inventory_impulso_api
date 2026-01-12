@@ -32,8 +32,14 @@ export default class StockCount extends BaseModel {
   @column({ columnName: 'created_by' })
   declare createdBy: string | null
 
+  @column({ columnName: 'counted_by' })
+  declare countedBy: string | null
+
   @column({ columnName: 'closed_by' })
   declare closedBy: string | null
+
+  @column.dateTime({ columnName: 'deleted_at' })
+  declare deletedAt: DateTime | null
 
   @belongsTo(() => InventoryWarehouse, { foreignKey: 'warehouseId' })
   declare warehouse: BelongsTo<typeof InventoryWarehouse>
