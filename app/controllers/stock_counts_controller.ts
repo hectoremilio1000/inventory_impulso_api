@@ -20,7 +20,11 @@ export default class StockCountsController {
       .orderBy('id', 'desc')
     if (status) q.where('status', String(status))
     if (warehouseId) q.where('warehouseId', Number(warehouseId))
-    return q
+    const rows = await q.withCount('items')
+    return rows.map((row) => ({
+      ...row.serialize(),
+      itemsCount: Number((row as any).$extras?.items_count ?? 0),
+    }))
   }
 
   public async store({ request, response }: HttpContext) {

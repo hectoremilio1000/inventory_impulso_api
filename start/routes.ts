@@ -34,6 +34,7 @@ const InventoryExternalRefsController = () =>
 const PrintAreaWarehouseMapsController = () =>
   import('#controllers/print_area_warehouse_maps_controller')
 const InventoryRecipesController = () => import('#controllers/inventory_recipes_controller')
+const PosProductsController = () => import('#controllers/pos_products_controller')
 
 router
   .group(() => {
@@ -162,6 +163,7 @@ router
     router.get('/purchase-runs/:id', [PurchaseRunsController, 'show'])
     router.post('/purchase-runs/:id/close', [PurchaseRunsController, 'close'])
     router.post('/purchase-runs/:id/reopen', [PurchaseRunsController, 'reopen'])
+    router.post('/purchase-runs/:id/cancel', [PurchaseRunsController, 'cancel'])
     /* ========= Stocks ========= */
     router.get('/inventory/stocks', [InventoryStocksController, 'index'])
 
@@ -177,6 +179,9 @@ router
     router.get('inventory/external-refs', [InventoryExternalRefsController, 'index'])
     router.delete('inventory/external-refs/:id', [InventoryExternalRefsController, 'destroy'])
 
+    // POS catalog proxy (public)
+    router.get('pos-products', [PosProductsController, 'index'])
+
     router.get('inventory/print-area-warehouse-maps', [PrintAreaWarehouseMapsController, 'index'])
     router.post('inventory/print-area-warehouse-maps', [PrintAreaWarehouseMapsController, 'store'])
     router.put('inventory/print-area-warehouse-maps/:id', [
@@ -191,6 +196,7 @@ router
     router.get('inventory/recipes', [InventoryRecipesController, 'index'])
     router.post('inventory/recipes', [InventoryRecipesController, 'store'])
     router.get('inventory/recipes/:id', [InventoryRecipesController, 'show'])
+    router.get('inventory/recipes/:id/lines', [InventoryRecipesController, 'lines'])
     router.put('inventory/recipes/:id', [InventoryRecipesController, 'update'])
     router.delete('inventory/recipes/:id', [InventoryRecipesController, 'destroy'])
 

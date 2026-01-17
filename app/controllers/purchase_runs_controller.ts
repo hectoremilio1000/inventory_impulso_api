@@ -20,9 +20,21 @@ export default class PurchaseRunsController {
 
     const q = PurchaseRun.query().where('restaurantId', restaurantId).orderBy('id', 'desc')
 
+    q.withCount('purchaseOrders', (sub) => {
+      sub.whereNot('status', 'cancelled')
+    })
+    q.withCount('stockRequests', (sub) => {
+      sub.whereNot('status', 'cancelled')
+    })
+
     if (status) q.where('status', status)
 
-    return q
+    const rows = await q
+    return rows.map((row) => ({
+      ...row.serialize(),
+      purchaseOrdersCount: Number((row as any).$extras?.purchaseOrders_count ?? 0),
+      stockRequestsCount: Number((row as any).$extras?.stockRequests_count ?? 0),
+    }))
   }
 
   // POST /api/purchase-runs
@@ -144,6 +156,52 @@ export default class PurchaseRunsController {
       .firstOrFail()
 
     run.status = 'draft'
+    run.closedBy = null
+    await run.save()
+
+    return { ok: true }
+  }
+
+  // POST /api/purchase-runs/:id/cancel
+  // Solo permite cancelar si NO está cerrado y NO tiene pedidos
+  public async cancel({ params, request, response }: HttpContext) {
+    const restaurantId = getRestaurantId({ request } as any)
+
+    const run = await PurchaseRun.query()
+      .where('restaurantId', restaurantId)
+      .where('id', params.id)
+      .firstOrFail()
+
+    if (run.status === 'closed') {
+      return response.badRequest({ message: 'El viaje ya está cerrado' })
+    }
+
+    if (run.status === 'cancelled') {
+      return response.badRequest({ message: 'El viaje ya está cancelado' })
+    }
+
+    const ordersCountRow = await PurchaseOrder.query()
+      .where('restaurantId', restaurantId)
+      .where('purchaseRunId', run.id)
+      .whereNot('status', 'cancelled')
+      .count('* as c')
+      .first()
+
+    const requestsCountRow = await StockRequest.query()
+      .where('restaurantId', restaurantId)
+      .where('purchaseRunId', run.id)
+      .whereNot('status', 'cancelled')
+      .count('* as c')
+      .first()
+
+    const ordersCount = Number((ordersCountRow as any)?.$extras?.c ?? 0)
+    const requestsCount = Number((requestsCountRow as any)?.$extras?.c ?? 0)
+
+    if (ordersCount + requestsCount > 0) {
+      return response.badRequest({ message: 'No se puede cancelar: el viaje ya tiene pedidos' })
+    }
+
+    run.status = 'cancelled'
     run.closedBy = null
     await run.save()
 

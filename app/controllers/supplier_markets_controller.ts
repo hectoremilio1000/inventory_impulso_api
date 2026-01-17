@@ -21,7 +21,9 @@ async function nextMarketCode(restaurantId: number, name: string) {
   const base = slugUpper(name).slice(0, 20) || 'MARKET'
 
   for (let i = 0; i < 500; i++) {
-    const code = i === 0 ? base : `${base}-${i + 1}`
+    const suffix = i === 0 ? '' : `-${i + 1}`
+    const trimmedBase = base.slice(0, 20 - suffix.length)
+    const code = `${trimmedBase}${suffix}`
     const exists = await SupplierMarket.query()
       .where('restaurantId', restaurantId)
       .where('code', code)
@@ -57,7 +59,7 @@ export default class SupplierMarketsController {
 
   public async store({ request, response }: HttpContext) {
     const restaurantId = getRestaurantId({ request } as any)
-    const payload = request.only(['code', 'name', 'description', 'isActive', 'supplierId'])
+    const payload = request.only(['name', 'description', 'isActive', 'supplierId'])
 
     const supplierId = Number(payload.supplierId || 0) || null
     if (supplierId) {
@@ -65,21 +67,37 @@ export default class SupplierMarketsController {
     }
 
     const name = String(payload.name ?? '').trim()
-    if (!name && !payload.code) {
-      return response.badRequest({ error: 'name o code requerido' })
+    if (!name) {
+      return response.badRequest({ error: 'nombre requerido' })
     }
 
-    const code = payload.code ? slugUpper(payload.code) : await nextMarketCode(restaurantId, name)
+    let row: SupplierMarket | null = null
 
-    const row = await SupplierMarket.create({
-      ...payload,
-      code,
-      name: name || code,
-      isActive: payload.isActive !== false,
-      restaurantId,
-    })
+    for (let i = 0; i < 5; i++) {
+      const code = await nextMarketCode(restaurantId, name)
+      try {
+        row = await SupplierMarket.create({
+          ...payload,
+          code,
+          name: name || code,
+          isActive: payload.isActive !== false,
+          restaurantId,
+        })
+        break
+      } catch (error: any) {
+        if (String(error?.code || '') === '23505') {
+          continue
+        }
+        throw error
+      }
+    }
+
+    if (!row) {
+      return response.internalServerError({ error: 'no se pudo generar un código único' })
+    }
 
     if (supplierId) {
+      await SupplierMarketSupplier.query().where('supplierId', supplierId).delete()
       await SupplierMarketSupplier.firstOrCreate({
         supplierMarketId: row.id,
         supplierId,
@@ -96,7 +114,7 @@ export default class SupplierMarketsController {
       .where('id', params.id)
       .firstOrFail()
 
-    row.merge(request.only(['code', 'name', 'description', 'isActive']))
+    row.merge(request.only(['name', 'description', 'isActive']))
     await row.save()
     return row
   }

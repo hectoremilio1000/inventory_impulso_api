@@ -1,7 +1,60 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import InventoryItem from '#models/inventory_item'
 import InventoryItemDetail from '#models/inventory_item_detail'
+import InventoryPresentation from '#models/inventory_presentation'
 import { getRestaurantId } from '#utils/restaurant'
+
+const IVA_RATE = 0.16
+const CODE_MAX_LENGTH = 30
+
+function slugUpper(input: string) {
+  return String(input ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .trim()
+    .replace(/[^A-Z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+}
+
+function buildCode(base: string, suffix?: string | number) {
+  const normalizedBase = String(base ?? '').trim()
+  if (!suffix) return normalizedBase.slice(0, CODE_MAX_LENGTH) || 'ITEM'
+
+  const suffixPart = `-${suffix}`
+  const maxBaseLen = Math.max(1, CODE_MAX_LENGTH - suffixPart.length)
+  const trimmedBase = normalizedBase.slice(0, maxBaseLen) || 'I'
+  return `${trimmedBase}${suffixPart}`
+}
+
+async function nextItemCode(restaurantId: number, base: string) {
+  const first = buildCode(base)
+  const exists = await InventoryItem.query().where('restaurantId', restaurantId).where('code', first).first()
+  if (!exists) return first
+
+  for (let i = 2; i < 1000; i++) {
+    const candidate = buildCode(base, i)
+    const exists2 = await InventoryItem.query()
+      .where('restaurantId', restaurantId)
+      .where('code', candidate)
+      .first()
+    if (!exists2) return candidate
+  }
+
+  return buildCode(base, String(Date.now()).slice(-6))
+}
+
+function normalizeIvaRate(input: unknown) {
+  if (input === true) return IVA_RATE
+  if (input === false) return 0
+  if (typeof input === 'string') {
+    const v = input.trim().toLowerCase()
+    if (v === 'true' || v === 'si') return IVA_RATE
+    if (v === 'false' || v === 'no') return 0
+  }
+  return input
+}
 
 export default class InventoryItemsController {
   public async index({ request }: HttpContext) {
@@ -34,7 +87,10 @@ export default class InventoryItemsController {
     const restaurantId = getRestaurantId({ request } as any)
     const payload = request.only(['code', 'name', 'description', 'groupId', 'unitId', 'kind'])
 
-    const item = await InventoryItem.create({ ...payload, restaurantId })
+    const baseCode = payload.code ? String(payload.code).trim() : slugUpper(payload.name ?? 'ITEM')
+    const code = await nextItemCode(restaurantId, baseCode || 'ITEM')
+
+    const item = await InventoryItem.create({ ...payload, code, restaurantId })
 
     // detalle 1:1 (si lo quieres crear siempre)
     await InventoryItemDetail.firstOrCreate(
@@ -69,8 +125,13 @@ export default class InventoryItemsController {
       .where('id', params.id)
       .firstOrFail()
 
+    const wasActive = item.isActive
     item.merge(request.only(['code', 'name', 'description', 'groupId', 'unitId', 'kind', 'isActive']))
     await item.save()
+
+    if (wasActive !== false && item.isActive === false) {
+      await InventoryPresentation.query().where('inventoryItemId', item.id).update({ isActive: false })
+    }
 
     return item
   }
@@ -100,6 +161,10 @@ export default class InventoryItemsController {
       'standardCost',
     ])
 
+    if ('tax1Rate' in payload) {
+      payload.tax1Rate = normalizeIvaRate(payload.tax1Rate) as any
+    }
+
     const detail = await InventoryItemDetail.updateOrCreate(
       { inventoryItemId: params.id },
       { inventoryItemId: params.id, ...payload }
@@ -117,6 +182,7 @@ export default class InventoryItemsController {
 
     item.isActive = false
     await item.save()
+    await InventoryPresentation.query().where('inventoryItemId', item.id).update({ isActive: false })
     return response.noContent()
   }
 }

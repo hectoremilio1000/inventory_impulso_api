@@ -22,13 +22,18 @@ export default class PurchaseOrdersController {
       .preload('supplier')
       .preload('purchaseRun') // ✅
       .preload('warehouse')
+      .withCount('items')
       .orderBy('id', 'desc')
 
     if (status) query.where('status', String(status))
     if (supplierId) query.where('supplierId', Number(supplierId))
     if (warehouseId) query.where('warehouseId', Number(warehouseId))
 
-    return query
+    const rows = await query
+    return rows.map((row) => ({
+      ...row.serialize(),
+      itemsCount: Number((row as any).$extras?.items_count ?? 0),
+    }))
   }
 
   public async store({ request, response }: HttpContext) {

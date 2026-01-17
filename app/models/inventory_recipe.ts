@@ -14,7 +14,7 @@ export default class InventoryRecipe extends BaseModel {
 
   // Bigint en DB, pero en JS lo manejamos como number (mientras tus IDs POS sean < 2^53)
   @column({ columnName: 'pos_product_id' })
-  declare posProductId: number
+  declare posProductId: number | null
 
   @column({ columnName: 'pos_product_code' })
   declare posProductCode: string | null

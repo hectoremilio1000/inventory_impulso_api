@@ -82,6 +82,19 @@ function slugUpper(input: string) {
     .replace(/-+/g, '-')
 }
 
+const IVA_RATE = 0.16
+
+function normalizeIvaRate(input: unknown) {
+  if (input === true) return IVA_RATE
+  if (input === false) return 0
+  if (typeof input === 'string') {
+    const v = input.trim().toLowerCase()
+    if (v === 'true' || v === 'si') return IVA_RATE
+    if (v === 'false' || v === 'no') return 0
+  }
+  return input
+}
+
 async function nextPresentationCode(inventoryItemId: number, name: string) {
   // Base: ITEMID + slug del nombre (corto)
   const base = `P${inventoryItemId}-${slugUpper(name).slice(0, 24)}`
@@ -142,6 +155,8 @@ export default class InventoryPresentationsController {
     const query = InventoryPresentation.query()
       .join('inventory_items', 'inventory_items.id', 'inventory_presentations.inventory_item_id')
       .where('inventory_items.restaurant_id', restaurantId)
+      .where('inventory_presentations.is_active', true)
+      .where('inventory_items.is_active', true)
       .select('inventory_presentations.*')
       .preload('presentationUnit')
       .preload('detail', (d) => d.preload('supplier'))
@@ -331,6 +346,10 @@ export default class InventoryPresentationsController {
       'lastCost',
       'averageCost',
     ])
+
+    if ('tax1Rate' in payload) {
+      payload.tax1Rate = normalizeIvaRate(payload.tax1Rate) as any
+    }
 
     // valida ubicación si viene locationId
     if (payload.locationId) {

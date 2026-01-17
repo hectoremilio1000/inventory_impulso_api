@@ -36,8 +36,14 @@ export default class SupplierMarketSuppliersController {
     // validar supplier del restaurante
     await Supplier.query().where('restaurantId', restaurantId).where('id', supplierId).firstOrFail()
 
+    const marketId = Number(params.marketId)
+    await SupplierMarketSupplier.query()
+      .where('supplierId', supplierId)
+      .whereNot('supplierMarketId', marketId)
+      .delete()
+
     const row = await SupplierMarketSupplier.firstOrCreate({
-      supplierMarketId: Number(params.marketId),
+      supplierMarketId: marketId,
       supplierId,
     })
 

@@ -19,6 +19,52 @@ type SalesLine = {
   modifiers?: Array<{ modifierProductId: number; qty: number }>
 }
 
+type ExpandedLine = {
+  inventoryItemId: number
+  qtyBase: number
+}
+
+async function expandRecipeLines(
+  trx: any,
+  recipeId: number,
+  multiplier = 1,
+  path: Set<number> = new Set()
+): Promise<ExpandedLine[]> {
+  if (path.has(recipeId)) return []
+  const nextPath = new Set(path)
+  nextPath.add(recipeId)
+
+  const rows = await trx.from('inventory_recipe_lines').where('recipe_id', recipeId)
+  const result: ExpandedLine[] = []
+
+  for (const rl of rows as any[]) {
+    const basePerUnit = Number(rl.qty_base ?? 0)
+    if (!basePerUnit) continue
+
+    const waste =
+      rl.waste_percent === null || rl.waste_percent === undefined
+        ? 0
+        : Number(rl.waste_percent)
+
+    const lineMultiplier = multiplier * basePerUnit * (1 + waste)
+
+    const subRecipeId = Number(rl.sub_recipe_id || 0)
+    const inventoryItemId = Number(rl.inventory_item_id || 0)
+
+    if (subRecipeId) {
+      const nested = await expandRecipeLines(trx, subRecipeId, lineMultiplier, nextPath)
+      result.push(...nested)
+      continue
+    }
+
+    if (inventoryItemId) {
+      result.push({ inventoryItemId, qtyBase: lineMultiplier })
+    }
+  }
+
+  return result
+}
+
 export default class InventorySalesConsumptionController {
   public async apply({ request, response }: HttpContext) {
     const restaurantId = getRestaurantId({ request } as any)
@@ -122,10 +168,8 @@ export default class InventorySalesConsumptionController {
             continue
           }
 
-          // 4) Cargar líneas de receta ANTES de marcar idempotencia
-          const recipeLines = await trx
-            .from('inventory_recipe_lines')
-            .where('recipe_id', Number(recipe.id))
+          // 4) Cargar líneas de receta (con sub-recetas) ANTES de marcar idempotencia
+          const recipeLines = await expandRecipeLines(trx, Number(recipe.id))
 
           // ✅ si no hay líneas, NO marcamos external_ref
           if (!recipeLines || recipeLines.length === 0) {
@@ -178,15 +222,9 @@ export default class InventorySalesConsumptionController {
 
           // 6) Aplicar líneas de receta
           for (const rl of recipeLines) {
-            const inventoryItemId = Number(rl.inventory_item_id)
-            const basePerUnit = Number(rl.qty_base)
-            const waste =
-              rl.waste_percent === null || rl.waste_percent === undefined
-                ? 0
-                : Number(rl.waste_percent)
-
-            const consumeBase = basePerUnit * consumeTarget.qty * (1 + waste)
-            if (!consumeBase) continue
+            const inventoryItemId = Number(rl.inventoryItemId)
+            const consumeBase = Number(rl.qtyBase) * consumeTarget.qty
+            if (!consumeBase || !inventoryItemId) continue
 
             const qtyBase = -consumeBase
 
