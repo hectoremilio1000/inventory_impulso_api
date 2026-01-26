@@ -27,6 +27,9 @@ const StockRequestsController = () => import('#controllers/stock_requests_contro
 
 const InventoryStocksController = () => import('#controllers/inventory_stocks_controller')
 const StockCountsController = () => import('#controllers/stock_counts_controller')
+const InventoryCutsController = () => import('#controllers/inventory_cuts_controller')
+const InventoryWastesController = () => import('#controllers/inventory_wastes_controller')
+const InventoryMovementsController = () => import('#controllers/inventory_movements_controller')
 
 // BOM controllers
 const InventoryExternalRefsController = () =>
@@ -166,6 +169,9 @@ router
     router.post('/purchase-runs/:id/cancel', [PurchaseRunsController, 'cancel'])
     /* ========= Stocks ========= */
     router.get('/inventory/stocks', [InventoryStocksController, 'index'])
+    router.get('/inventory/cuts', [InventoryCutsController, 'index'])
+    router.post('/inventory/cuts', [InventoryCutsController, 'store'])
+    router.post('/inventory/cuts/calc', [InventoryCutsController, 'calc'])
 
     /* ========= Conteos ========= */
     router.get('/stock-counts', [StockCountsController, 'index'])
@@ -176,6 +182,15 @@ router
     router.delete('/stock-counts/:id/items/:itemId', [StockCountsController, 'destroyItem'])
     router.post('/stock-counts/:id/close', [StockCountsController, 'close'])
     router.delete('/stock-counts/:id', [StockCountsController, 'destroy'])
+    /* ========= Mermas ========= */
+    router.get('/inventory/wastes', [InventoryWastesController, 'index'])
+    router.post('/inventory/wastes', [InventoryWastesController, 'store'])
+    router.put('/inventory/wastes/:id', [InventoryWastesController, 'update'])
+    router.post('/inventory/wastes/:id/apply', [InventoryWastesController, 'apply'])
+
+    /* ========= Movimientos ========= */
+    router.get('/inventory/movements', [InventoryMovementsController, 'index'])
+    router.post('/inventory/movements', [InventoryMovementsController, 'store'])
     router.get('inventory/external-refs', [InventoryExternalRefsController, 'index'])
     router.delete('inventory/external-refs/:id', [InventoryExternalRefsController, 'destroy'])
 

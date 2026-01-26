@@ -1,9 +1,7 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import db from '@adonisjs/lucid/services/db'
 import StockCount from '#models/stock_count'
 import StockCountItem from '#models/stock_count_item'
 import InventoryStock from '#models/inventory_stock'
-import InventoryMovement from '#models/inventory_movement'
 import { getRestaurantId } from '#utils/restaurant'
 import { DateTime } from 'luxon'
 
@@ -161,7 +159,7 @@ export default class StockCountsController {
     return response.noContent()
   }
 
-  // POST /stock-counts/:id/close  -> genera ajustes y actualiza inventory_stocks
+  // POST /stock-counts/:id/close -> solo cierra conteo (no ajusta inventario)
   public async close({ params, request, response }: HttpContext) {
     const restaurantId = getRestaurantId({ request } as any)
 
@@ -176,66 +174,12 @@ export default class StockCountsController {
     }
 
     const closedBy = request.input('closedBy')
-    const movementAt = DateTime.now()
+    const closedAt = DateTime.now()
 
-    await db.transaction(async (trx) => {
-      stockCount.useTransaction(trx)
-
-      for (const it of stockCount.items) {
-        const diff = Number(it.differenceQtyBase)
-        if (!diff) continue
-
-        // movimiento ajuste
-        await InventoryMovement.create(
-          {
-            restaurantId,
-            warehouseId: stockCount.warehouseId,
-            inventoryItemId: it.inventoryItemId,
-            presentationId: it.presentationId ?? null,
-            movementType: 'stock_count_adjustment',
-            quantityBase: diff,
-            unitCost: it.unitCostAtCount ?? null,
-            totalCost: it.unitCostAtCount ? diff * Number(it.unitCostAtCount) : null,
-            movementAt,
-            referenceType: 'stock_count',
-            referenceId: stockCount.id,
-            notes: 'Ajuste por conteo físico',
-          },
-          { client: trx }
-        )
-
-        // aplicar al stock
-        const stock = await InventoryStock.query({ client: trx })
-          .where('restaurantId', restaurantId)
-          .where('warehouseId', stockCount.warehouseId)
-          .where('inventoryItemId', it.inventoryItemId)
-          .first()
-
-        if (!stock) {
-          await InventoryStock.create(
-            {
-              restaurantId,
-              warehouseId: stockCount.warehouseId,
-              inventoryItemId: it.inventoryItemId,
-              qtyOnHandBase: Number(it.countedQtyBase),
-              avgCost: it.unitCostAtCount ?? null,
-              lastMovementAt: movementAt,
-            },
-            { client: trx }
-          )
-        } else {
-          stock.useTransaction(trx)
-          stock.qtyOnHandBase = Number(stock.qtyOnHandBase) + diff
-          stock.lastMovementAt = movementAt
-          await stock.save()
-        }
-      }
-
-      stockCount.status = 'closed'
-      stockCount.finishedAt = movementAt
-      stockCount.closedBy = closedBy
-      await stockCount.save()
-    })
+    stockCount.status = 'closed'
+    stockCount.finishedAt = closedAt
+    stockCount.closedBy = closedBy
+    await stockCount.save()
 
     return { ok: true }
   }
